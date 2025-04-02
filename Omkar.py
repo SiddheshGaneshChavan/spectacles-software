@@ -7,6 +7,9 @@ import bcrypt
 from tkcalendar import DateEntry
 import datetime
 import os,sys
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
 # Get the current date in YYYY-MM-DD format
 current_date = datetime.datetime.today().strftime('%Y-%m-%d')
 
@@ -23,12 +26,19 @@ def fetch_data():
     conn.close()
 
     global tree  # Ensure tree is accessible
-    if 'tree' in globals():
+    if 'tree'in globals():
         for item in tree.get_children():
             tree.delete(item)
 
         for row in rows:
             tree.insert("", "end", values=row)
+
+    if 'tree2' in globals():
+        for item in tree2.get_children():
+            tree2.delete(item)
+
+        for row in rows:
+            tree2.insert("", "end", values=row)
 
 
 def add_stock():
@@ -56,7 +66,7 @@ def add_stock():
 
 def update_stock():
     """Update the selected stock record in the database."""
-    selected_item = tree.selection()
+    selected_item = tree2.selection()
     if not selected_item:
         messagebox.showerror("Selection Error", "Please select a record to update.")
         return
@@ -84,11 +94,11 @@ def update_stock():
 
 def on_row_selected(event):
     """Populate input fields when a row is selected."""
-    selected_item = tree.selection()
+    selected_item = tree2.selection()
     if not selected_item:
         return
 
-    item_values = tree.item(selected_item)["values"]
+    item_values = tree2.item(selected_item)["values"]
     entry_frame_update.delete(0, tk.END)
     entry_frame_update.insert(0, item_values[1])
 
@@ -98,12 +108,10 @@ def on_row_selected(event):
     entry_count_update.delete(0, tk.END)
     entry_count_update.insert(0, item_values[3])
 
-    entry_date_update.delete(0, tk.END)
-    entry_date_update.insert(0, item_values[4])
 
 def open_admin():
     global entry_frame_add, entry_type_add, entry_count_add, entry_date_add
-    global entry_frame_update, entry_type_update, entry_count_update, entry_date_update, tree
+    global entry_frame_update, entry_type_update, entry_count_update, entry_date_update, tree ,tree2
     
     root = tk.Tk()
     root.title("Stock Management")
@@ -118,7 +126,6 @@ def open_admin():
     notebook = ttk.Notebook(root)
     notebook.pack(pady=10, fill='both', expand=True)
 
-    # Add Stock Tab
     frame_add = ttk.Frame(notebook, padding=10)
     notebook.add(frame_add, text="Add Stock")
 
@@ -143,7 +150,21 @@ def open_admin():
     btn_add = ttk.Button(frame_add, text="Add Stock", command=add_stock)
     btn_add.grid(row=4, column=0, columnspan=2, pady=10)
 
-    # Update Stock Tab
+    columns = ("No","Frame", "Type", "Count", "Date")
+    tree = ttk.Treeview(frame_add, columns=columns, show="headings", height=5)
+
+    for col in columns:
+        tree.heading(col, text=col)
+        tree.column(col, width=100)
+
+    scrollbar = ttk.Scrollbar(frame_add, orient="vertical", command=tree.yview)
+    tree.configure(yscroll=scrollbar.set)
+
+    tree.grid(row=5, column=0, columnspan=2, padx=5, pady=10, sticky="nsew")
+    scrollbar.grid(row=5, column=2, sticky="ns")
+    frame_add.grid_columnconfigure(1, weight=1)
+    frame_add.grid_rowconfigure(5, weight=1)
+
     frame_update = ttk.Frame(notebook, padding=10)
     notebook.add(frame_update, text="Update Stock")
 
@@ -161,32 +182,29 @@ def open_admin():
 
     ttk.Label(frame_update, text="Date:").grid(row=3, column=0, padx=5, pady=5, sticky='w')
     entry_date_update = ttk.Entry(frame_update, width=30)
+    entry_date_update.insert(0,current_date)
+    entry_date_update.config(state="readonly")
     entry_date_update.grid(row=3, column=1, padx=5, pady=5)
 
     btn_update = ttk.Button(frame_update, text="Update Stock", command=update_stock)
     btn_update.grid(row=4, column=0, columnspan=2, pady=10)
 
-    # Treeview Table
-    frame_table = ttk.Frame(root)
-    frame_table.pack(pady=10, fill='both', expand=True)
-    
-    columns = ("No", "Frame", "Type", "Count", "Date")
-    tree = ttk.Treeview(frame_table, columns=columns, show="headings")
-    
+    tree2 = ttk.Treeview(frame_update, columns=columns, show="headings", height=5)
+
     for col in columns:
-        tree.heading(col, text=col)
-        tree.column(col, width=120, anchor='center')
-    
-    tree.pack(pady=5, fill='both', expand=True)
-    tree.bind("<<TreeviewSelect>>", on_row_selected)
-    
-    frame_visualize = ttk.Frame(notebook, padding=10)
-    notebook.add(frame_visualize, text="Visualize")
+        tree2.heading(col, text=col)
+        tree2.column(col, width=100)
+
+    scrollbar = ttk.Scrollbar(frame_update, orient="vertical", command=tree.yview)
+    tree2.configure(yscroll=scrollbar.set)
+    tree2.bind("<<TreeviewSelect>>", on_row_selected)
+    tree2.grid(row=5, column=0, columnspan=2, padx=5, pady=10, sticky="nsew")
+    scrollbar.grid(row=5, column=2, sticky="ns")
+    frame_update.grid_columnconfigure(1, weight=1)
+    frame_update.grid_rowconfigure(5, weight=1)
 
     fetch_data()
     root.mainloop()
-
-
 
 def login_user():
     """Handles user login by validating credentials."""
