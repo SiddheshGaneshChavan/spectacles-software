@@ -311,6 +311,10 @@ def open_dashboard():
     frame_combobox.set("Select Frame")
     frame_combobox.bind("<<ComboboxSelected>>", update_type_options)
 
+    tk.Label(tab1, text="Unique No:", font=("Arial", 12)).grid(row=5, column=2, padx=10, pady=5, sticky="w")
+    uniqueno_add= tk.Entry(tab1, font=("Arial", 12), width=30)
+    uniqueno_add.grid(row=5, column=3, padx=10, pady=5)
+
     def refresh_data():
         """Refresh frame and type options from the database."""
         frame_options = get_options("Frame")  # Fetch latest Frame options
@@ -324,7 +328,7 @@ def open_dashboard():
         type_combobox.set("Select Type")
 
     refresh_button = tk.Button(tab1, text="Refresh Data", font=("Arial", 12), bg="white", command=refresh_data)
-    refresh_button.grid(row=5, column=2, columnspan=2, padx=10, pady=5)
+    refresh_button.grid(row=5, column=4, columnspan=2, padx=10, pady=5)
 
     tk.Label(tab1, text="Type:", font=("Arial", 12)).grid(row=6, column=0, padx=10, pady=5, sticky="w")
     type_combobox = ttk.Combobox(tab1, values=["Select a Frame First"], font=("Arial", 12), width=28)
@@ -371,8 +375,13 @@ def open_dashboard():
     def calculate_balance(*args):
         try:
             total = float(total_amt.get()) if total_amt.get() else 0
+            discount_percent = float(discount_per.get()) if discount_per.get() else 0
             advance = float(advance_amt.get()) if advance_amt.get() else 0
-            balance = total - advance
+
+            discount_amount = (discount_percent / 100) * total
+            discounted_total = total - discount_amount
+            balance = discounted_total - advance
+
             balance_amt.config(state="normal")
             balance_amt.delete(0, tk.END)
             balance_amt.insert(0, f"{balance:.2f}")
@@ -387,6 +396,11 @@ def open_dashboard():
     total_amt = tk.Entry(tab1, font=("Arial", 12), width=30)
     total_amt.grid(row=9, column=1, padx=10, pady=5)
     total_amt.bind("<KeyRelease>", calculate_balance)
+
+    tk.Label(tab1, text="Discount%:", font=("Arial", 12)).grid(row=9, column=2, padx=10, pady=5, sticky="w")
+    discount_per = tk.Entry(tab1, font=("Arial", 12), width=30)
+    discount_per.grid(row=9, column=3, padx=10, pady=5)
+    discount_per.bind("<KeyRelease>", calculate_balance)
 
     tk.Label(tab1, text="Advanced Amount:", font=("Arial", 12)).grid(row=10, column=0, padx=10, pady=5, sticky="w")
     advance_amt = tk.Entry(tab1, font=("Arial", 12), width=30)
