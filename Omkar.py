@@ -456,6 +456,10 @@ def open_dashboard():
             le_sph_read = entries[1][3].get()
             le_cyl_read = entries[1][4].get()
             le_axis_read = entries[1][5].get()
+
+            if not (name and phone_no and bill_no and frame and frame_type and total_amount):
+                 messagebox.showerror("Error", "All fields must be filled!")
+                 return
             cursor.execute('''INSERT INTO customers 
             (name, phone_no, bill_no, order_date, dob, Frame, Type, total_amount, discount, advance_amount, balance_amount, Lens,payment)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
