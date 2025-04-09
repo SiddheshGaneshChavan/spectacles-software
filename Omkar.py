@@ -1,4 +1,3 @@
-
 import tkinter as tk
 from tkinter import Entry, Label, Button, Frame, messagebox, ttk
 from PIL import Image, ImageTk
@@ -371,52 +370,65 @@ def open_dashboard():
             row_entries.append(entry)
         entries.append(row_entries)
 
-    # Amount Section
     def calculate_balance(*args):
         try:
             total = float(total_amt.get()) if total_amt.get() else 0
-            discount_percent = float(discount_per.get()) if discount_per.get() else 0
+            discount_value = float(discount.get()) if discount.get() else 0
             advance = float(advance_amt.get()) if advance_amt.get() else 0
 
-            discount_amount = (discount_percent / 100) * total
-            discounted_total = total - discount_amount
+            discounted_total = total - discount_value
             balance = discounted_total - advance
 
+        # Update After Discount field
+            after_discount.config(state="normal")
+            after_discount.delete(0, tk.END)
+            after_discount.insert(0, f"{discounted_total:.2f}")
+            after_discount.config(state="readonly")
+
+        # Update Balance field
             balance_amt.config(state="normal")
             balance_amt.delete(0, tk.END)
             balance_amt.insert(0, f"{balance:.2f}")
             balance_amt.config(state="readonly")
         except ValueError:
-            balance_amt.config(state="normal")
-            balance_amt.delete(0, tk.END)
-            balance_amt.insert(0, "Invalid Input")
-            balance_amt.config(state="readonly")
+            for field in [after_discount, balance_amt]:
+                field.config(state="normal")
+                field.delete(0, tk.END)
+                field.insert(0, "Invalid Input")
+                field.config(state="readonly")
 
+# Total Amount
     tk.Label(tab1, text="Total Amount:", font=("Arial", 12)).grid(row=9, column=0, padx=10, pady=5, sticky="w")
     total_amt = tk.Entry(tab1, font=("Arial", 12), width=30)
     total_amt.grid(row=9, column=1, padx=10, pady=5)
     total_amt.bind("<KeyRelease>", calculate_balance)
 
-    tk.Label(tab1, text="Discount%:", font=("Arial", 12)).grid(row=9, column=2, padx=10, pady=5, sticky="w")
-    discount_per = tk.Entry(tab1, font=("Arial", 12), width=30)
-    discount_per.grid(row=9, column=3, padx=10, pady=5)
-    discount_per.bind("<KeyRelease>", calculate_balance)
+# Discount
+    tk.Label(tab1, text="Discount:", font=("Arial", 12)).grid(row=10, column=0, padx=10, pady=5, sticky="w")
+    discount = tk.Entry(tab1, font=("Arial", 12), width=30)
+    discount.grid(row=10, column=1, padx=10, pady=5)
+    discount.bind("<KeyRelease>", calculate_balance)
 
-    tk.Label(tab1, text="Advanced Amount:", font=("Arial", 12)).grid(row=10, column=0, padx=10, pady=5, sticky="w")
+# After Discount (readonly)
+    tk.Label(tab1, text="After Discount:", font=("Arial", 12)).grid(row=10, column=2, padx=10, pady=5, sticky="w")
+    after_discount = tk.Entry(tab1, font=("Arial", 12), width=30, state="readonly")
+    after_discount.grid(row=10, column=3, padx=10, pady=5)
+
+# Advance Amount
+    tk.Label(tab1, text="Advance:", font=("Arial", 12)).grid(row=11, column=0, padx=10, pady=5, sticky="w")
     advance_amt = tk.Entry(tab1, font=("Arial", 12), width=30)
-    advance_amt.grid(row=10, column=1, padx=10, pady=5)
+    advance_amt.grid(row=11, column=1, padx=10, pady=5)
     advance_amt.bind("<KeyRelease>", calculate_balance)
 
-    tk.Label(tab1, text="Balance Amount:", font=("Arial", 12)).grid(row=11, column=0, padx=10, pady=5, sticky="w")
+# Balance Amount (readonly)
+    tk.Label(tab1, text="Balance:", font=("Arial", 12)).grid(row=11, column=2, padx=10, pady=5, sticky="w")
     balance_amt = tk.Entry(tab1, font=("Arial", 12), width=30, state="readonly")
-    balance_amt.grid(row=11, column=1, padx=10, pady=5)
-
+    balance_amt.grid(row=11, column=3, padx=10, pady=5)
+    
     def insert_data():
         try:
             conn = sqlite3.connect(DB_NAME)
             cursor = conn.cursor()
-
-        # Fetch data from entry fields
             name = name_entry.get()
             phone_no = phone_entry.get()
             bill_no = transaction.get()
@@ -426,8 +438,11 @@ def open_dashboard():
             frame_type = type_combobox.get()
             lens = Lens_entry.get()
             total_amount = total_amt.get()
+            discount_amount=discount.get()
+            unique_no=uniqueno_add.get()
             advance_amount = advance_amt.get()
             balance_amount = balance_amt.get()
+            payment_status = 'Paid' if float(balance_amount) == 0 else 'Not Paid'
             re_sph_dist = entries[0][0].get()
             re_cyl_dist = entries[0][1].get()
             re_axis_dist = entries[0][2].get()
@@ -441,39 +456,34 @@ def open_dashboard():
             le_sph_read = entries[1][3].get()
             le_cyl_read = entries[1][4].get()
             le_axis_read = entries[1][5].get()
-        # Validate required fields
-            if not (name and phone_no and bill_no and frame and frame_type and total_amount):
-                messagebox.showerror("Error", "All fields must be filled!")
-                return
+            cursor.execute('''INSERT INTO customers 
+            (name, phone_no, bill_no, order_date, dob, Frame, Type, total_amount, discount, advance_amount, balance_amount, Lens,payment)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (name, phone_no, bill_no, order_date, dob, frame, frame_type, total_amount, discount_amount, advance_amount, balance_amount, lens,payment_status))
 
-            cursor.execute("BEGIN TRANSACTION;")
+            customer_id = cursor.lastrowid  # Get ID of newly inserted customer
+            cursor.execute('''
+            INSERT INTO eye_prescriptions 
+            (customer_id, eye_type, re_sph, re_cyl, re_axis, le_sph, le_cyl, le_axis)
+            VALUES (?, 'Distance', ?, ?, ?, ?, ?, ?)
+        ''', (customer_id, re_sph_dist, re_cyl_dist, re_axis_dist, le_sph_dist, le_cyl_dist, le_axis_dist))
 
-        # Insert into Customers table
-            cursor.execute("""INSERT INTO customers (name, phone_no, bill_no, order_date, dob, Frame, Type, total_amount, advance_amount, balance_amount, Lens) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);""", (name, phone_no, bill_no, order_date, dob, frame, frame_type, float(total_amount), float(advance_amount), float(balance_amount), lens))
-        # Get last inserted customer ID
-            customer_id = cursor.lastrowid
-
-        # Insert Distance and Reading prescriptions
-            cursor.executemany("""
-            INSERT INTO eye_prescriptions (
-                customer_id, eye_type, re_sph, re_cyl, re_axis, le_sph, le_cyl, le_axis
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
-        """, [
-            (customer_id, "Distance", re_sph_dist, re_cyl_dist, re_axis_dist, le_sph_dist, le_cyl_dist, le_axis_dist),
-            (customer_id, "Reading", re_sph_read, re_cyl_read, re_axis_read, le_sph_read, le_cyl_read, le_axis_read)
-        ])
-
-        # Commit the transaction
+            cursor.execute('''
+            INSERT INTO eye_prescriptions 
+            (customer_id, eye_type, re_sph, re_cyl, re_axis, le_sph, le_cyl, le_axis)
+            VALUES (?, 'Reading', ?, ?, ?, ?, ?, ?)
+        ''', (customer_id, re_sph_read, re_cyl_read, re_axis_read, le_sph_read, le_cyl_read, le_axis_read))
+            
+            cursor.execute('''
+            INSERT INTO Spectacles_no
+            (customer_id, Frame, Type, unique_no)
+            VALUES (?, ?, ?, ?)
+        ''', (customer_id, frame, frame_type, unique_no))
             conn.commit()
-            messagebox.showinfo("Success", "Data inserted successfully!")
-
-        except sqlite3.Error as e:
-            conn.rollback()  # Rollback transaction in case of error
-            messagebox.showerror("Database Error", f"Error: {e}")
-
-        finally:
             conn.close()
-
+            messagebox.showinfo("Success", "Customer data inserted successfully.")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to insert data: {e}")
     insert_button = tk.Button(tab1, text="Insert Data", font=("Arial", 12), bg="green", fg="white", command=insert_data)
     insert_button.grid(row=12, column=0, columnspan=2, padx=10, pady=5)
     # Adding ComboBox to tab2
