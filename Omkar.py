@@ -1,7 +1,8 @@
 import tkinter as tk
 from tkinter import Entry, Label, Button, Frame, messagebox, ttk
 from PIL import Image, ImageTk
-import sqlite3
+import mysql.connector
+from mysql.connector import Error,IntegrityError
 import bcrypt
 from tkcalendar import DateEntry
 import datetime
@@ -11,20 +12,22 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 # Get the current date in YYYY-MM-DD format
 current_date = datetime.datetime.today().strftime('%Y-%m-%d')
+conn=None
+db_config = {
+    'host': 'localhost',
+    'user': 'root',
+    'password': 'root',
+    'database': 'users',
+    'port':3360
+}
 
-
-DB_NAME = "users.db"
-# Function to get correct file paths (for PyInstaller compatibility)
 
 def fetch_data():
-    """Fetch data from Stocks table and display in Treeview."""
-    conn = sqlite3.connect(DB_NAME)
+    conn = mysql.connector.connect(**db_config)
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM Stocks")
     rows = cursor.fetchall()
     conn.close()
-
-    global tree  # Ensure tree is accessible
     if 'tree'in globals():
         for item in tree.get_children():
             tree.delete(item)
@@ -41,8 +44,6 @@ def fetch_data():
 
 
 def add_stock():
-    global entry_frame_add, entry_type_add, entry_count_add, entry_date_add
-    
     frame = entry_frame_add.get()
     type_ = entry_type_add.get()
     count = entry_count_add.get()
@@ -52,19 +53,18 @@ def add_stock():
         messagebox.showerror("Input Error", "Please enter valid values.")
         return
     try:
-        conn = sqlite3.connect(DB_NAME)
+        conn = mysql.connector.connect(**db_config)
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO Stocks (Frame, Type, Count, Date) VALUES (?, ?, ?, ?)",
+        cursor.execute("INSERT INTO Stocks (Frame, Type, Count, Date) VALUES (%s, %s, %s, %s)",
                        (frame, type_, int(count), date))
         conn.commit()
         conn.close()
         fetch_data()
         messagebox.showinfo("Success", "Stock added successfully.")
-    except sqlite3.IntegrityError:
+    except IntegrityError:
         messagebox.showerror("Error", "Frame & Type combination already exists!")
 
 def update_stock():
-    """Update the selected stock record in the database."""
     selected_item = tree2.selection()
     if not selected_item:
         messagebox.showerror("Selection Error", "Please select a record to update.")
@@ -80,11 +80,10 @@ def update_stock():
         return
 
     item_values = tree.item(selected_item)["values"]
-    stock_id = item_values[0]  # Get the "No" column (Primary Key)
-
-    conn = sqlite3.connect(DB_NAME)
+    stock_id = item_values[0] 
+    conn = mysql.connector.connect(**db_config)
     cursor = conn.cursor()
-    cursor.execute("UPDATE Stocks SET Frame=?, Type=?, Count=?, Date=? WHERE No=?",
+    cursor.execute("UPDATE Stocks SET Frame=%s, Type=%s, Count=%s, Date=%s WHERE No=%s",
                    (frame, type_, int(count), date, stock_id))
     conn.commit()
     conn.close()
@@ -92,7 +91,6 @@ def update_stock():
     messagebox.showinfo("Success", "Stock updated successfully.")
 
 def on_row_selected(event):
-    """Populate input fields when a row is selected."""
     selected_item = tree2.selection()
     if not selected_item:
         return
@@ -156,11 +154,11 @@ def open_admin():
         tree.heading(col, text=col)
         tree.column(col, width=100)
 
-    scrollbar = ttk.Scrollbar(frame_add, orient="vertical", command=tree.yview)
-    tree.configure(yscroll=scrollbar.set)
+    scrollbar_add= ttk.Scrollbar(frame_add, orient="vertical", command=tree.yview)
+    tree.configure(yscroll=scrollbar_add.set)
 
     tree.grid(row=5, column=0, columnspan=2, padx=5, pady=10, sticky="nsew")
-    scrollbar.grid(row=5, column=2, sticky="ns")
+    scrollbar_add.grid(row=5, column=2, sticky="ns")
     frame_add.grid_columnconfigure(1, weight=1)
     frame_add.grid_rowconfigure(5, weight=1)
 
@@ -194,11 +192,11 @@ def open_admin():
         tree2.heading(col, text=col)
         tree2.column(col, width=100)
 
-    scrollbar = ttk.Scrollbar(frame_update, orient="vertical", command=tree.yview)
-    tree2.configure(yscroll=scrollbar.set)
+    scrollbar_update = ttk.Scrollbar(frame_update, orient="vertical", command=tree2.yview)
+    tree2.configure(yscroll=scrollbar_update.set)
     tree2.bind("<<TreeviewSelect>>", on_row_selected)
     tree2.grid(row=5, column=0, columnspan=2, padx=5, pady=10, sticky="nsew")
-    scrollbar.grid(row=5, column=2, sticky="ns")
+    scrollbar_update.grid(row=5, column=2, sticky="ns")
     frame_update.grid_columnconfigure(1, weight=1)
     frame_update.grid_rowconfigure(5, weight=1)
 
@@ -206,32 +204,35 @@ def open_admin():
     root.mainloop()
 
 def login_user():
-    """Handles user login by validating credentials."""
     username = usrname_entry.get().strip()
     password = passwd_entry.get().strip()
 
     if not username or not password:
         messagebox.showerror("Error", "Username and password cannot be empty")
         return
-
-    with sqlite3.connect("users.db") as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT password, type FROM users WHERE username = ?", (username,))
+    try:
+        conn=mysql.connector.connect(**db_config)
+        cursor=conn.cursor()
+        cursor.execute("SELECT password, type FROM users WHERE username = %s", (username,))
         user = cursor.fetchone()
+        if user and bcrypt.checkpw(password.encode(), user[0].encode()):
+            messagebox.showinfo("Success", "Login successful")
+            main.destroy()
 
-    if user and bcrypt.checkpw(password.encode(), user[0].encode()):
-        messagebox.showinfo("Success", "Login successful")
-        main.destroy()  # Close login window
-        
-        if user[1] == "admin":
-            open_admin()  # Redirect admin users
+            if user[1] == "admin":
+                open_admin()
+            else:
+                open_dashboard()
         else:
-            open_dashboard()  # Redirect normal users
-    else:
-        messagebox.showerror("Error", "Invalid username or password")
+            messagebox.showerror("Error", "Invalid username or password")
+    except Error as e:
+        messagebox.showerror("Database Error", f"Error: {str(e)}")
+    finally:
+        if conn.is_connected():
+            cursor.close()
+            conn.close()
 
 def open_dashboard():
-    """Opens the main dashboard after successful login."""
     dashboard = tk.Tk()
     dashboard.title("Dashboard")
     dashboard.geometry("900x450")
@@ -249,11 +250,10 @@ def open_dashboard():
     notebook.add(tab3, text="Details of Spectacles")
 
     def get_options(column, frame=None):
-        """Fetch distinct values from Stocks table. Optionally filter Type by Frame."""
-        conn = sqlite3.connect(DB_NAME)
+        conn = mysql.connector.connect(**db_config)
         cursor = conn.cursor()
         if frame:
-            cursor.execute("SELECT DISTINCT Type FROM Stocks WHERE Frame = ? AND Count > 0", (frame,))
+            cursor.execute("SELECT DISTINCT Type FROM Stocks WHERE Frame = %s AND Count > 0", (frame,))
         else:
             cursor.execute(f"SELECT DISTINCT {column} FROM Stocks WHERE Count > 0")
         options = [row[0] for row in cursor.fetchall()]
@@ -261,7 +261,6 @@ def open_dashboard():
         return options
 
     def update_type_options(event):
-        """Update Type dropdown based on selected Frame."""
         selected_frame = frame_combobox.get()
         type_options = get_options("Type", selected_frame)
         type_combobox["values"] = type_options if type_options else ["No Types Available"]
@@ -282,7 +281,6 @@ def open_dashboard():
 
     
     def validate_phone(P):
-        """Validate phone number input (only digits, max length 10)."""
         if P.isdigit() and len(P) <= 10:
             return True
         elif P == "":  # Allow backspace
@@ -427,7 +425,7 @@ def open_dashboard():
     
     def insert_data():
         try:
-            conn = sqlite3.connect(DB_NAME)
+            conn = mysql.connector.connect(**db_config)
             cursor = conn.cursor()
             name = name_entry.get()
             phone_no = phone_entry.get()
@@ -437,51 +435,62 @@ def open_dashboard():
             frame = frame_combobox.get()
             frame_type = type_combobox.get()
             lens = Lens_entry.get()
-            total_amount = total_amt.get()
-            discount_amount=discount.get()
             unique_no=uniqueno_add.get()
-            advance_amount = advance_amt.get()
-            balance_amount = balance_amt.get()
+            total_amount = float(total_amt.get())
+            discount_amount = float(discount.get())
+            advance_amount = float(advance_amt.get())
+            balance_amount = float(balance_amt.get())
             payment_status = 'Paid' if float(balance_amount) == 0 else 'Not Paid'
-            re_sph_dist = entries[0][0].get()
-            re_cyl_dist = entries[0][1].get()
-            re_axis_dist = entries[0][2].get()
-            le_sph_dist = entries[0][3].get()
-            le_cyl_dist = entries[0][4].get()
-            le_axis_dist = entries[0][5].get()
+            def parse_float(value):
+                try:
+                    return float(value) if value else None
+                except ValueError:
+                    return None
 
-            re_sph_read = entries[1][0].get()
-            re_cyl_read = entries[1][1].get()
-            re_axis_read = entries[1][2].get()
-            le_sph_read = entries[1][3].get()
-            le_cyl_read = entries[1][4].get()
-            le_axis_read = entries[1][5].get()
+            def parse_int(value):
+                try:
+                    return int(value) if value else None
+                except ValueError:
+                    return None
+            re_sph_dist = parse_float(entries[0][0].get())
+            re_cyl_dist = parse_float(entries[0][1].get())
+            re_axis_dist =parse_float(entries[0][2].get())
+            le_sph_dist = parse_float(entries[0][3].get())
+            le_cyl_dist = parse_float(entries[0][4].get())
+            le_axis_dist = parse_float(entries[0][5].get())
+
+            re_sph_read = parse_float(entries[1][0].get())
+            re_cyl_read =parse_float(entries[1][1].get())
+            re_axis_read = parse_float(entries[1][2].get())
+            le_sph_read = parse_float(entries[1][3].get())
+            le_cyl_read = parse_float(entries[1][4].get())
+            le_axis_read =parse_float(entries[1][5].get())
 
             if not (name and phone_no and bill_no and frame and frame_type and total_amount):
                  messagebox.showerror("Error", "All fields must be filled!")
                  return
             cursor.execute('''INSERT INTO customers 
             (name, phone_no, bill_no, order_date, dob, Frame, Type, total_amount, discount, advance_amount, balance_amount, Lens,payment)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ''', (name, phone_no, bill_no, order_date, dob, frame, frame_type, total_amount, discount_amount, advance_amount, balance_amount, lens,payment_status))
 
             customer_id = cursor.lastrowid  # Get ID of newly inserted customer
             cursor.execute('''
             INSERT INTO eye_prescriptions 
             (customer_id, eye_type, re_sph, re_cyl, re_axis, le_sph, le_cyl, le_axis)
-            VALUES (?, 'Distance', ?, ?, ?, ?, ?, ?)
+            VALUES (%s, 'Distance', %s, %s, %s, %s, %s, %s)
         ''', (customer_id, re_sph_dist, re_cyl_dist, re_axis_dist, le_sph_dist, le_cyl_dist, le_axis_dist))
 
             cursor.execute('''
             INSERT INTO eye_prescriptions 
             (customer_id, eye_type, re_sph, re_cyl, re_axis, le_sph, le_cyl, le_axis)
-            VALUES (?, 'Reading', ?, ?, ?, ?, ?, ?)
+            VALUES (%s, 'Reading', %s, %s, %s, %s, %s, %s)
         ''', (customer_id, re_sph_read, re_cyl_read, re_axis_read, le_sph_read, le_cyl_read, le_axis_read))
             
             cursor.execute('''
             INSERT INTO Spectacles_no
             (customer_id, Frame, Type, unique_no)
-            VALUES (?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s)
         ''', (customer_id, frame, frame_type, unique_no))
             conn.commit()
             conn.close()
@@ -492,9 +501,9 @@ def open_dashboard():
     insert_button.grid(row=12, column=0, columnspan=2, padx=10, pady=5)
     # Adding ComboBox to tab2
     def fetch_bill_numbers():
-        conn = sqlite3.connect(DB_NAME)  # Replace with actual database path
+        conn = mysql.connector.connect(**db_config)
         cursor = conn.cursor()
-        cursor.execute("SELECT bill_no FROM customers WHERE payment=?", ('Not Paid',))
+        cursor.execute("SELECT bill_no FROM customers WHERE payment=%s", ('Not Paid',))
         bills = [row[0] for row in cursor.fetchall()]
         conn.close()
         return bills if bills else []
@@ -504,9 +513,9 @@ def open_dashboard():
         selected_bill = customer_combo.get()
         if not selected_bill:
             return  # Prevent errors if nothing is selected
-        conn = sqlite3.connect(DB_NAME)
+        conn = mysql.connector.connect(**db_config)
         cursor = conn.cursor()
-        cursor.execute("SELECT balance_amount FROM customers WHERE bill_no = ?", (selected_bill,))
+        cursor.execute("SELECT balance_amount FROM customers WHERE bill_no = %s", (selected_bill,))
         balance = cursor.fetchone()
         conn.close()
         if balance:
@@ -542,14 +551,14 @@ def open_dashboard():
         if not selected_bill:
             return
         
-        conn = sqlite3.connect(DB_NAME)
+        conn = mysql.connector.connect(**db_config)
         cursor = conn.cursor()
-        cursor.execute("SELECT balance_amount, advance_amount FROM customers WHERE bill_no = ?", (selected_bill,))
+        cursor.execute("SELECT balance_amount, advance_amount FROM customers WHERE bill_no = %s", (selected_bill,))
         result = cursor.fetchone()
         
         if result:
             new_advance_amount = result[0] + result[1]  # balance_amt + advance_amt
-            cursor.execute("UPDATE customers SET advance_amount = ?, balance_amount = 0 WHERE bill_no = ?", (new_advance_amount, selected_bill))
+            cursor.execute("UPDATE customers SET advance_amount = %s, balance_amount = 0 WHERE bill_no = %s", (new_advance_amount, selected_bill))
             messagebox.showinfo("Payment Update", f"Bill No {selected_bill} has been marked as Paid.")
             conn.commit()
         
@@ -567,12 +576,12 @@ def open_dashboard():
     update_button.grid(row=0, column=2, padx=10, pady=10, sticky="w")
     
     # Adding Treeview to tab2
-    tree = ttk.Treeview(tab2, columns=("Billno", "Name", "Phone_no", "Balance Amount"), show="headings")
-    tree.heading("Billno", text="Billno")
-    tree.heading("Name", text="Name")
-    tree.heading("Phone_no", text="Phone No")
-    tree.heading("Balance Amount", text="Balance Amount")
-    tree.grid(row=2, column=0, columnspan=3, padx=10, pady=10, sticky="nsew")
+    tree3 = ttk.Treeview(tab2, columns=("Billno", "Name", "Phone_no", "Balance Amount"), show="headings")
+    tree3.heading("Billno", text="Billno")
+    tree3.heading("Name", text="Name")
+    tree3.heading("Phone_no", text="Phone No")
+    tree3.heading("Balance Amount", text="Balance Amount")
+    tree3.grid(row=2, column=0, columnspan=3, padx=10, pady=10, sticky="nsew")
     
     # Configure grid to expand properly
     tab2.grid_columnconfigure(0, weight=1)
@@ -582,14 +591,14 @@ def open_dashboard():
     
     # Function to fetch and display customers with balance > 0
     def load_customers():
-        conn = sqlite3.connect(DB_NAME)  # Replace with actual database path
+        conn = mysql.connector.connect(**db_config)
         cursor = conn.cursor()
-        cursor.execute("SELECT bill_no, name, phone_no, balance_amount FROM customers WHERE payment=?", ('Not Paid',))
+        cursor.execute("SELECT bill_no, name, phone_no, balance_amount FROM customers WHERE payment=%s", ('Not Paid',))
         rows = cursor.fetchall()
         
-        tree.delete(*tree.get_children())  # Clear existing data
+        tree3.delete(*tree3.get_children())  # Clear existing data
         for row in rows:
-            tree.insert("", "end", values=row)
+            tree3.insert("", "end", values=row)
         
         conn.close()
         dashboard.after(5000, load_customers)  # Refresh data every 5 seconds
@@ -607,7 +616,7 @@ def open_dashboard():
             tree2.delete(item)
 
     # Connect to SQLite database
-        conn = sqlite3.connect(DB_NAME)
+        conn = mysql.connector.connect(**db_config)
         cursor = conn.cursor()
 
     # Search query: Match either phone number or bill number
@@ -618,7 +627,7 @@ def open_dashboard():
                eye_prescriptions.le_axis
         FROM customers
         LEFT JOIN eye_prescriptions ON customers.id = eye_prescriptions.customer_id
-        WHERE customers.phone_no = ? OR customers.bill_no = ?
+        WHERE customers.phone_no = %s OR customers.bill_no = %s
     """
 
         cursor.execute(query, (phone, bill))
